@@ -19,17 +19,17 @@ export const TopBar: React.FC<TopBarProps> = ({ onExit, fileName }) => {
         <header className="bg-dark-surface h-12 flex-shrink-0 flex items-center justify-between px-4 border-b border-dark-border z-20">
             <div className="flex items-center space-x-2">
                 <WandIcon />
-                <span className="font-bold text-sm">PhotoCursor AI</span>
+                <span className="font-semibold text-sm text-dark-text-primary">PhotoCursor AI</span>
             </div>
             <div className="text-sm text-dark-text-secondary">
                 {fileName || 'Untitled'}
             </div>
             <div className="flex items-center space-x-2">
-                <button className="flex items-center space-x-2 bg-brand-primary hover:bg-brand-secondary text-white text-sm font-bold py-1.5 px-3 rounded-md transition duration-200">
+                <button className="flex items-center space-x-2 bg-dark-accent hover:bg-blue-600 text-white text-sm font-semibold py-1.5 px-3 rounded-md transition duration-200">
                     <ExportIcon />
                     <span>Export</span>
                 </button>
-                 <button onClick={onExit} title="Back to Home" className="p-1.5 text-dark-text-secondary hover:text-white hover:bg-dark-border rounded-md transition">
+                 <button onClick={onExit} title="Back to Home" className="p-1.5 text-dark-text-secondary hover:text-dark-text-primary hover:bg-dark-border rounded-md transition">
                     <HomeIcon />
                 </button>
             </div>

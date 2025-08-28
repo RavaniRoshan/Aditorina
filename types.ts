@@ -8,13 +8,38 @@ export interface AiEditResult {
   textResponse: string | null;
 }
 
-export type Tool = 'ai-edit' | 'crop' | 'text' | 'brush' | 'select';
+export type Tool = 'ai-edit' | 'crop' | 'text' | 'brush' | 'select' | 'adjustments';
+
+export interface BrushOptions {
+  size: number;
+  color: string;
+}
+
+export interface TextOptions {
+  content: string;
+  fontSize: number;
+  color: string;
+}
 
 export interface Layer {
   id: string;
   name: string;
   visible: boolean;
-  type: 'image' | 'text';
-  // For image layers, content is a data URL.
-  content: string;
+  type: 'image' | 'text' | 'drawing';
+  content: string; // Data URL for images/drawings
+  options?: {
+    // Text Layer Options
+    text?: string;
+    fontSize?: number;
+    color?: string;
+    x?: number;
+    y?: number;
+    // Drawing Layer Options
+    points?: {x: number, y: number}[];
+    brushColor?: string;
+    brushSize?: number;
+    // Common options
+    width?: number;
+    height?: number;
+  };
 }

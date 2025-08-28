@@ -1,56 +1,161 @@
-import React from 'react';
-import { ImageFile, AiEditResult } from '../../types';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { ImageFile, Layer, BrushOptions, Tool } from '../../types';
 import { ImageUploader } from '../ImageUploader';
-import { LoadingSpinner } from '../LoadingSpinner';
-import { IconButton } from '../IconButton';
-import { ClearIcon, DownloadIcon } from './icons';
 
 interface CanvasProps {
-    originalImage: ImageFile | null;
-    editResult: AiEditResult | null;
-    isLoading: boolean;
+    layers: Layer[];
+    setLayers: React.Dispatch<React.SetStateAction<Layer[]>>;
     onImageUpload: (image: ImageFile) => void;
-    onReset: () => void;
+    activeTool: Tool;
+    brushOptions: BrushOptions;
+    cropRect: {x:number, y:number, width:number, height:number} | null;
+    setCropRect: (rect: {x:number, y:number, width:number, height:number} | null) => void;
+    canvasContainerRef: React.RefObject<HTMLDivElement>;
 }
 
-const ImagePanel: React.FC<{
-    title: string;
-    imageUrl: string | null;
-    children?: React.ReactNode;
-}> = ({ title, imageUrl, children }) => (
-    <div className="flex-1 flex flex-col bg-dark-bg rounded-lg border-2 border-dashed border-dark-border overflow-hidden">
-        <div className="p-2 border-b border-dark-border">
-            <h3 className="text-xs text-center font-semibold text-dark-text-secondary">{title}</h3>
-        </div>
-        <div className="flex-1 flex items-center justify-center relative p-1">
-            {imageUrl && <img src={imageUrl} alt={title} className="object-contain max-h-full max-w-full" />}
-            {children}
-        </div>
-    </div>
-);
-
-
-export const Canvas: React.FC<CanvasProps> = ({
-    originalImage,
-    editResult,
-    isLoading,
-    onImageUpload,
-    onReset
-}) => {
+export const Canvas: React.FC<CanvasProps> = (props) => {
+    const { layers, setLayers, onImageUpload, activeTool, brushOptions, cropRect, setCropRect, canvasContainerRef } = props;
     
-    const handleDownload = () => {
-        if (editResult?.editedImage) {
-            const link = document.createElement('a');
-            link.href = editResult.editedImage;
-            const originalFileName = originalImage?.file.name.split('.').slice(0, -1).join('.') || 'edited-image';
-            link.download = `${originalFileName}-edited.png`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [isDrawing, setIsDrawing] = useState(false);
+    const [points, setPoints] = useState<{x: number, y: number}[]>([]);
+    
+    const [isCropping, setIsCropping] = useState(false);
+    const [cropStart, setCropStart] = useState<{x:number, y:number} | null>(null);
+
+    const getCanvasDimensions = () => {
+        const baseLayer = layers.find(l => l.type === 'image');
+        if (baseLayer && baseLayer.options?.width && baseLayer.options?.height) {
+            return { width: baseLayer.options.width, height: baseLayer.options.height };
         }
+        return { width: 0, height: 0 };
+    };
+    
+    const { width, height } = getCanvasDimensions();
+
+    const getMousePos = (e: React.MouseEvent): {x: number, y: number} => {
+        const canvas = canvasRef.current;
+        if (!canvas) return { x: 0, y: 0 };
+        const rect = canvas.getBoundingClientRect();
+        
+        // Account for canvas scaling if it's not displayed at its native resolution
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
+        return {
+            x: (e.clientX - rect.left) * scaleX,
+            y: (e.clientY - rect.top) * scaleY,
+        };
     };
 
-    if (!originalImage) {
+    const drawLayers = useCallback(async () => {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (!ctx || !canvas) return;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        for (const layer of layers) {
+            if (!layer.visible) continue;
+
+            if (layer.type === 'image') {
+                const img = new Image();
+                img.src = layer.content;
+                await new Promise(resolve => { img.onload = resolve; });
+                ctx.drawImage(img, 0, 0);
+            } else if (layer.type === 'drawing' && layer.options?.points) {
+                ctx.beginPath();
+                ctx.strokeStyle = layer.options.brushColor || '#FFFFFF';
+                ctx.lineWidth = layer.options.brushSize || 5;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                layer.options.points.forEach((point, index) => {
+                    if (index === 0) ctx.moveTo(point.x, point.y);
+                    else ctx.lineTo(point.x, point.y);
+                });
+                ctx.stroke();
+            } else if (layer.type === 'text' && layer.options) {
+                 ctx.fillStyle = layer.options.color || '#FFFFFF';
+                 ctx.font = `${layer.options.fontSize || 48}px Inter`;
+                 ctx.fillText(layer.content, layer.options.x || 50, layer.options.y || 100);
+            }
+        }
+    }, [layers]);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+            canvas.width = width;
+            canvas.height = height;
+        }
+        drawLayers();
+    }, [layers, width, height, drawLayers]);
+
+    // Brush Tool Logic
+    const handleMouseDown = (e: React.MouseEvent) => {
+        if (activeTool === 'brush') {
+            setIsDrawing(true);
+            const pos = getMousePos(e);
+            setPoints([pos]);
+        } else if (activeTool === 'crop') {
+            setIsCropping(true);
+            const pos = getMousePos(e);
+            setCropStart(pos);
+            setCropRect({ x: pos.x, y: pos.y, width: 0, height: 0 });
+        }
+    };
+    
+    const handleMouseMove = (e: React.MouseEvent) => {
+        if (isDrawing && activeTool === 'brush') {
+            const pos = getMousePos(e);
+            setPoints(prev => [...prev, pos]);
+            
+            const canvas = canvasRef.current;
+            const ctx = canvas?.getContext('2d');
+            if (!ctx || points.length < 1) return;
+            
+            ctx.beginPath();
+            ctx.strokeStyle = brushOptions.color;
+            ctx.lineWidth = brushOptions.size;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.moveTo(points[points.length-1].x, points[points.length-1].y);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            
+        } else if (isCropping && activeTool === 'crop' && cropStart) {
+            const pos = getMousePos(e);
+            const newWidth = pos.x - cropStart.x;
+            const newHeight = pos.y - cropStart.y;
+            setCropRect({ x: cropStart.x, y: cropStart.y, width: newWidth, height: newHeight });
+        }
+    };
+    
+    const handleMouseUp = () => {
+        if(isDrawing && activeTool === 'brush' && points.length > 1) {
+             const newLayer: Layer = {
+                id: `layer-${Date.now()}`,
+                name: 'Drawing',
+                visible: true,
+                type: 'drawing',
+                content: '',
+                options: {
+                    points: points,
+                    brushColor: brushOptions.color,
+                    brushSize: brushOptions.size
+                }
+            };
+            setLayers(prev => [...prev, newLayer]);
+        }
+        
+        setIsDrawing(false);
+        setPoints([]);
+
+        setIsCropping(false);
+        setCropStart(null);
+    };
+
+    if (layers.length === 0) {
         return (
             <div className="w-full max-w-lg aspect-video bg-dark-surface rounded-lg border-2 border-dashed border-dark-border flex items-center justify-center">
                 <ImageUploader onImageUpload={onImageUpload} />
@@ -58,39 +163,35 @@ export const Canvas: React.FC<CanvasProps> = ({
         );
     }
     
-    const originalImageUrl = `data:${originalImage.file.type};base64,${originalImage.base64}`;
+    const cursorClass = () => {
+        switch(activeTool) {
+            case 'brush': return 'cursor-crosshair';
+            case 'crop': return 'cursor-crosshair';
+            default: return 'cursor-default';
+        }
+    };
 
     return (
-        <div className="w-full h-full flex flex-col lg:flex-row items-center justify-center gap-4">
-            {/* Original Image Panel */}
-            <div className="w-full lg:w-1/2 h-1/2 lg:h-full relative group">
-                <ImagePanel title="Original" imageUrl={originalImageUrl} />
-                <div className="absolute top-10 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                     <IconButton onClick={onReset} aria-label="Clear image" className="bg-black/50 hover:bg-red-600/80">
-                        <ClearIcon />
-                    </IconButton>
-                </div>
-            </div>
-
-            {/* Edited Image Panel */}
-            <div className="w-full lg:w-1/2 h-1/2 lg:h-full relative group">
-                <ImagePanel title="AI Edited Result" imageUrl={editResult?.editedImage}>
-                    {isLoading && <LoadingSpinner />}
-                    {!isLoading && !editResult?.editedImage && (
-                       <div className="text-center text-dark-text-secondary p-4">
-                           <p className="font-semibold">Your edited image will appear here.</p>
-                           <p className="text-sm">Describe your edit and click "Generate".</p>
-                       </div>
-                    )}
-                </ImagePanel>
-                 {editResult?.editedImage && !isLoading && (
-                    <div className="absolute top-10 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <IconButton onClick={handleDownload} aria-label="Download image" className="bg-black/50 hover:bg-brand-primary/80">
-                            <DownloadIcon />
-                        </IconButton>
-                    </div>
-                )}
-            </div>
+        <div className="relative" style={{ width, height }}>
+            <canvas
+                ref={canvasRef}
+                className={cursorClass()}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp} // End drawing if mouse leaves canvas
+            />
+            {activeTool === 'crop' && cropRect && (
+                <div 
+                    className="absolute border-2 border-dashed border-dark-accent bg-dark-accent/20 pointer-events-none"
+                    style={{ 
+                        left: cropRect.x, 
+                        top: cropRect.y, 
+                        width: cropRect.width, 
+                        height: cropRect.height 
+                    }}
+                />
+            )}
         </div>
     );
 };
