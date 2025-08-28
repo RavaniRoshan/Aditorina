@@ -1,10 +1,12 @@
 
+
 import React from 'react';
-import { ExportIcon, HomeIcon } from './icons';
+import { ExportIcon, HomeIcon, NewProjectIcon } from './icons';
 
 interface TopBarProps {
     onExit: () => void;
     onExport: () => void;
+    onNewProject: () => void;
     fileName?: string;
 }
 
@@ -16,7 +18,7 @@ const WandIcon = () => (
 );
 
 
-export const TopBar: React.FC<TopBarProps> = ({ onExit, onExport, fileName }) => {
+export const TopBar: React.FC<TopBarProps> = ({ onExit, onExport, onNewProject, fileName }) => {
     return (
         <header className="bg-dark-surface h-12 flex-shrink-0 flex items-center justify-between px-4 border-b border-dark-border z-20">
             <div className="flex items-center space-x-2">
@@ -27,6 +29,12 @@ export const TopBar: React.FC<TopBarProps> = ({ onExit, onExport, fileName }) =>
                 {fileName || 'Untitled'}
             </div>
             <div className="flex items-center space-x-2">
+                 <button 
+                    onClick={onNewProject}
+                    className="flex items-center space-x-2 bg-dark-panel hover:bg-dark-border text-dark-text-secondary hover:text-dark-text-primary text-sm font-semibold py-1.5 px-3 rounded-md transition duration-200">
+                    <NewProjectIcon />
+                    <span>New</span>
+                </button>
                 <button 
                     onClick={onExport}
                     className="flex items-center space-x-2 bg-dark-accent hover:bg-blue-600 text-white text-sm font-semibold py-1.5 px-3 rounded-md transition duration-200">

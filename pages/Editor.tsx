@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { ImageFile, Tool, Layer, BrushOptions, TextOptions } from '../types';
 import { editImageWithPrompt } from '../services/geminiService';
 import { TopBar } from '../components/editor/TopBar';
@@ -9,6 +9,7 @@ import { FloatingToolbar } from '../components/editor/FloatingToolbar';
 import { LayerContextMenu } from '../components/editor/LayerContextMenu';
 import { v4 as uuidv4 } from 'uuid';
 
+const PROJECT_STATE_KEY = 'photoCursorProjectState';
 
 interface EditorProps {
     onExitEditor: () => void;
@@ -34,6 +35,87 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const canvasContainerRef = useRef<HTMLDivElement>(null);
 
+    const base64StringToFile = (base64String: string, filename: string, mimeType: string): File => {
+      const byteCharacters = atob(base64String);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      return new File([byteArray], filename, { type: mimeType });
+    };
+
+    // Load state on mount
+    useEffect(() => {
+        const savedStateJSON = localStorage.getItem(PROJECT_STATE_KEY);
+        if (savedStateJSON) {
+            try {
+                const savedState = JSON.parse(savedStateJSON);
+                
+                if (savedState.imageFile) {
+                    const { fileName, fileType, base64 } = savedState.imageFile;
+                    const file = base64StringToFile(base64, fileName, fileType);
+                    setImageFile({ file, base64 });
+                }
+                
+                if (savedState.layers) setLayers(savedState.layers);
+                if (savedState.activeLayerId) setActiveLayerId(savedState.activeLayerId);
+                if (savedState.activeTool) setActiveTool(savedState.activeTool);
+                if (savedState.prompt) setPrompt(savedState.prompt);
+                if (savedState.brushOptions) setBrushOptions(savedState.brushOptions);
+                if (savedState.textOptions) setTextOptions(savedState.textOptions);
+                
+            } catch (e) {
+                console.error("Failed to load project state:", e);
+                localStorage.removeItem(PROJECT_STATE_KEY);
+            }
+        }
+    }, []);
+
+    // Save state on change
+    useEffect(() => {
+        if (!imageFile) {
+            return;
+        }
+        const stateToSave = {
+            imageFile: imageFile ? {
+                fileName: imageFile.file.name,
+                fileType: imageFile.file.type,
+                base64: imageFile.base64,
+            } : null,
+            layers,
+            activeLayerId,
+            activeTool,
+            prompt,
+            brushOptions,
+            textOptions,
+        };
+        
+        try {
+            localStorage.setItem(PROJECT_STATE_KEY, JSON.stringify(stateToSave));
+        } catch (e) {
+            console.error("Failed to save project state:", e);
+        }
+    }, [imageFile, layers, activeLayerId, activeTool, prompt, brushOptions, textOptions]);
+
+    const handleNewProject = () => {
+        if (window.confirm("Are you sure you want to start a new project? Your current work will be cleared.")) {
+            localStorage.removeItem(PROJECT_STATE_KEY);
+            // Reset all states to initial values
+            setImageFile(null);
+            setLayers([]);
+            setActiveLayerId(null);
+            setIsLoading(false);
+            setError(null);
+            setAiTextResponse(null);
+            setActiveTool('select');
+            setPrompt('');
+            setBrushOptions({ size: 10, color: '#FFFFFF' });
+            setTextOptions({ content: 'Hello World', fontSize: 48, color: '#FFFFFF' });
+            setCropRect(null);
+            setContextMenu(null);
+        }
+    };
 
     const handleImageUpload = (image: ImageFile) => {
         setImageFile(image);
@@ -212,7 +294,7 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
 
     return (
         <div className="h-screen w-screen bg-dark-bg flex flex-col overflow-hidden text-dark-text-primary font-sans" onClick={closeContextMenu}>
-            <TopBar onExit={onExitEditor} fileName={imageFile?.file.name} onExport={handleExport} />
+            <TopBar onExit={onExitEditor} fileName={imageFile?.file.name} onExport={handleExport} onNewProject={handleNewProject} />
             <div className="flex flex-1 overflow-hidden">
                 <LeftPanel 
                     layers={layers}
