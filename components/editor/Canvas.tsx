@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useCallback } from 'react';
 import { ImageFile, Layer, BrushOptions, Tool } from '../../types';
 import { ImageUploader } from '../ImageUploader';
@@ -12,11 +11,11 @@ interface CanvasProps {
     brushOptions: BrushOptions;
     cropRect: {x:number, y:number, width:number, height:number} | null;
     setCropRect: (rect: {x:number, y:number, width:number, height:number} | null) => void;
-    canvasContainerRef: React.RefObject<HTMLDivElement>;
+    viewTransform: { x: number; y: number; zoom: number };
 }
 
 export const Canvas: React.FC<CanvasProps> = (props) => {
-    const { canvasRef, layers, setLayers, onImageUpload, activeTool, brushOptions, cropRect, setCropRect } = props;
+    const { canvasRef, layers, setLayers, onImageUpload, activeTool, brushOptions, cropRect, setCropRect, viewTransform } = props;
     
     const [isDrawing, setIsDrawing] = useState(false);
     const [points, setPoints] = useState<{x: number, y: number}[]>([]);
@@ -115,6 +114,9 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
     }, [layers, width, height, drawLayers, canvasRef]);
 
     const handleMouseDown = (e: React.MouseEvent) => {
+        if (e.buttons !== 1) return;
+        e.stopPropagation();
+
         if (activeTool === 'brush') {
             setIsDrawing(true);
             const pos = getMousePos(e);
@@ -128,6 +130,7 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
     };
     
     const handleMouseMove = (e: React.MouseEvent) => {
+        e.stopPropagation();
         const pos = getMousePos(e);
 
         if (isDrawing && activeTool === 'brush') {
@@ -156,7 +159,8 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
         }
     };
     
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: React.MouseEvent) => {
+        e.stopPropagation();
         if(isDrawing && activeTool === 'brush' && points.length > 1) {
              const newLayer: Layer = {
                 id: `layer-${Date.now()}`,
@@ -197,7 +201,16 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
     };
 
     return (
-        <div className="relative" style={{ width, height }}>
+        <div 
+            className="absolute"
+            style={{
+                width: width,
+                height: height,
+                transform: `translate(${viewTransform.x}px, ${viewTransform.y}px) scale(${viewTransform.zoom})`,
+                transformOrigin: 'top left',
+            }}
+            onMouseDown={(e) => e.stopPropagation()} // Prevent pan when clicking on canvas
+        >
             <canvas
                 ref={canvasRef}
                 className={cursorClass()}
