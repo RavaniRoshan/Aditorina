@@ -1,8 +1,10 @@
+
 import React from 'react';
 import { ExportIcon, HomeIcon } from './icons';
 
 interface TopBarProps {
     onExit: () => void;
+    onExport: () => void;
     fileName?: string;
 }
 
@@ -14,7 +16,7 @@ const WandIcon = () => (
 );
 
 
-export const TopBar: React.FC<TopBarProps> = ({ onExit, fileName }) => {
+export const TopBar: React.FC<TopBarProps> = ({ onExit, onExport, fileName }) => {
     return (
         <header className="bg-dark-surface h-12 flex-shrink-0 flex items-center justify-between px-4 border-b border-dark-border z-20">
             <div className="flex items-center space-x-2">
@@ -25,7 +27,9 @@ export const TopBar: React.FC<TopBarProps> = ({ onExit, fileName }) => {
                 {fileName || 'Untitled'}
             </div>
             <div className="flex items-center space-x-2">
-                <button className="flex items-center space-x-2 bg-dark-accent hover:bg-blue-600 text-white text-sm font-semibold py-1.5 px-3 rounded-md transition duration-200">
+                <button 
+                    onClick={onExport}
+                    className="flex items-center space-x-2 bg-dark-accent hover:bg-blue-600 text-white text-sm font-semibold py-1.5 px-3 rounded-md transition duration-200">
                     <ExportIcon />
                     <span>Export</span>
                 </button>

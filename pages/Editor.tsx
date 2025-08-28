@@ -1,12 +1,14 @@
-
-
 import React, { useState, useCallback, useRef } from 'react';
-import { ImageFile, AiEditResult, Tool, Layer, BrushOptions, TextOptions } from '../types';
+import { ImageFile, Tool, Layer, BrushOptions, TextOptions } from '../types';
 import { editImageWithPrompt } from '../services/geminiService';
 import { TopBar } from '../components/editor/TopBar';
-import { Toolbar } from '../components/editor/Toolbar';
+import { LeftPanel } from '../components/editor/LeftPanel';
 import { Canvas } from '../components/editor/Canvas';
 import { RightPanel } from '../components/editor/RightPanel';
+import { FloatingToolbar } from '../components/editor/FloatingToolbar';
+import { LayerContextMenu } from '../components/editor/LayerContextMenu';
+import { v4 as uuidv4 } from 'uuid';
+
 
 interface EditorProps {
     onExitEditor: () => void;
@@ -27,6 +29,9 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
     const [textOptions, setTextOptions] = useState<TextOptions>({ content: 'Hello World', fontSize: 48, color: '#FFFFFF' });
     const [cropRect, setCropRect] = useState<{x:number, y:number, width:number, height:number} | null>(null);
 
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; layerId: string; } | null>(null);
+
+    const canvasRef = useRef<HTMLCanvasElement>(null);
     const canvasContainerRef = useRef<HTMLDivElement>(null);
 
 
@@ -38,7 +43,7 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
         const img = new Image();
         img.onload = () => {
             const newLayer: Layer = {
-                id: `layer-${Date.now()}`,
+                id: uuidv4(),
                 name: 'Background',
                 visible: true,
                 type: 'image',
@@ -71,7 +76,7 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
 
             if (result.editedImage) {
                  const newLayer: Layer = {
-                    id: `layer-${Date.now()}`,
+                    id: uuidv4(),
                     name: prompt.substring(0, 20) || 'AI Edit',
                     visible: true,
                     type: 'image',
@@ -89,18 +94,19 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
 
     const handleAddText = () => {
         const newLayer: Layer = {
-            id: `layer-${Date.now()}`,
+            id: uuidv4(),
             name: textOptions.content.substring(0, 20) || 'Text Layer',
             visible: true,
             type: 'text',
             content: textOptions.content,
             options: {
                 ...textOptions,
-                x: 50, // Default position
+                x: 50,
                 y: 100
             }
         };
         setLayers(prev => [...prev, newLayer]);
+        setActiveLayerId(newLayer.id);
     };
     
     const handleToolOptionsChange = useCallback((tool: Tool, options: any) => {
@@ -112,31 +118,112 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
     }, []);
     
     const handleApplyCrop = () => {
-        // This is a placeholder for a more complex crop implementation
-        // which would involve rendering the cropped image to a new canvas.
-        if(cropRect) {
-             alert(`Cropping to: \nX: ${cropRect.x.toFixed(0)}\nY: ${cropRect.y.toFixed(0)}\nWidth: ${cropRect.width.toFixed(0)}\nHeight: ${cropRect.height.toFixed(0)}`);
+        if (!cropRect || !canvasRef.current || cropRect.width === 0 || cropRect.height === 0) {
+            setActiveTool('select');
+            return;
         }
+    
+        const sourceCanvas = canvasRef.current;
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = Math.abs(cropRect.width);
+        tempCanvas.height = Math.abs(cropRect.height);
+        const tempCtx = tempCanvas.getContext('2d');
+    
+        if (tempCtx) {
+            const sx = cropRect.width > 0 ? cropRect.x : cropRect.x + cropRect.width;
+            const sy = cropRect.height > 0 ? cropRect.y : cropRect.y + cropRect.height;
+            const sWidth = Math.abs(cropRect.width);
+            const sHeight = Math.abs(cropRect.height);
+
+            tempCtx.drawImage(sourceCanvas, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight);
+            
+            const newDataUrl = tempCanvas.toDataURL('image/png');
+            const newLayer: Layer = {
+                id: uuidv4(),
+                name: 'Cropped Background',
+                visible: true,
+                type: 'image',
+                content: newDataUrl,
+                options: {
+                    width: sWidth,
+                    height: sHeight,
+                }
+            };
+            setLayers([newLayer]);
+            setActiveLayerId(newLayer.id);
+        }
+    
+        setCropRect(null);
         setActiveTool('select');
     };
 
+    const handleExport = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
 
-    const handleReset = () => {
-        setImageFile(null);
-        setLayers([]);
-        setActiveLayerId(null);
-        setPrompt('');
-        setError(null);
-        setIsLoading(false);
+        const link = document.createElement('a');
+        link.download = `${imageFile?.file.name.split('.')[0] || 'canvas'}-export.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    };
+
+    const handleLayerContextMenu = (e: React.MouseEvent, layerId: string) => {
+        e.preventDefault();
+        setContextMenu({ x: e.clientX, y: e.clientY, layerId });
+    };
+
+    const closeContextMenu = () => setContextMenu(null);
+
+    const handleDeleteLayer = (layerId: string) => {
+        setLayers(layers.filter(l => l.id !== layerId));
+        if (activeLayerId === layerId) {
+            setActiveLayerId(null);
+        }
+        closeContextMenu();
+    };
+
+    const handleDuplicateLayer = (layerId: string) => {
+        const layerToDuplicate = layers.find(l => l.id === layerId);
+        if (layerToDuplicate) {
+            const newLayer = { ...layerToDuplicate, id: uuidv4(), name: `${layerToDuplicate.name} Copy` };
+            const index = layers.findIndex(l => l.id === layerId);
+            const newLayers = [...layers];
+            newLayers.splice(index + 1, 0, newLayer);
+            setLayers(newLayers);
+            setActiveLayerId(newLayer.id);
+        }
+        closeContextMenu();
+    };
+
+    const handleMoveLayer = (layerId: string, direction: 'up' | 'down') => {
+        const index = layers.findIndex(l => l.id === layerId);
+        if (index === -1) return;
+    
+        const newIndex = direction === 'up' ? index + 1 : index - 1;
+    
+        if (newIndex >= 0 && newIndex < layers.length) {
+            const newLayers = [...layers];
+            const [movedLayer] = newLayers.splice(index, 1);
+            newLayers.splice(newIndex, 0, movedLayer);
+            setLayers(newLayers);
+        }
+        closeContextMenu();
     };
 
     return (
-        <div className="h-screen w-screen bg-dark-bg flex flex-col overflow-hidden text-dark-text-primary font-sans">
-            <TopBar onExit={onExitEditor} fileName={imageFile?.file.name} />
+        <div className="h-screen w-screen bg-dark-bg flex flex-col overflow-hidden text-dark-text-primary font-sans" onClick={closeContextMenu}>
+            <TopBar onExit={onExitEditor} fileName={imageFile?.file.name} onExport={handleExport} />
             <div className="flex flex-1 overflow-hidden">
-                <Toolbar activeTool={activeTool} onToolSelect={setActiveTool} />
-                <main ref={canvasContainerRef} className="flex-1 bg-black/50 flex items-center justify-center p-4 overflow-auto">
+                <LeftPanel 
+                    layers={layers}
+                    activeLayerId={activeLayerId}
+                    onSelectLayer={setActiveLayerId}
+                    onToggleVisibility={(id) => setLayers(layers.map(l => l.id === id ? {...l, visible: !l.visible} : l))}
+                    onLayerContextMenu={handleLayerContextMenu}
+                />
+                <main ref={canvasContainerRef} className="flex-1 bg-black/50 flex items-center justify-center p-4 overflow-auto relative">
                    <Canvas
+                        canvasRef={canvasRef}
                         layers={layers}
                         setLayers={setLayers}
                         onImageUpload={handleImageUpload}
@@ -146,6 +233,7 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
                         setCropRect={setCropRect}
                         canvasContainerRef={canvasContainerRef}
                    />
+                   <FloatingToolbar activeTool={activeTool} onToolSelect={setActiveTool} />
                 </main>
                 <RightPanel 
                     activeTool={activeTool}
@@ -161,11 +249,18 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
                     textOptions={textOptions}
                     onAddText={handleAddText}
                     onApplyCrop={handleApplyCrop}
-                    layers={layers}
-                    setLayers={setLayers}
-                    activeLayerId={activeLayerId}
-                    setActiveLayerId={setActiveLayerId}
                 />
+                {contextMenu && (
+                    <LayerContextMenu 
+                        menuPosition={{x: contextMenu.x, y: contextMenu.y}}
+                        layerId={contextMenu.layerId}
+                        onClose={closeContextMenu}
+                        onDelete={handleDeleteLayer}
+                        onDuplicate={handleDuplicateLayer}
+                        onMoveUp={(id) => handleMoveLayer(id, 'up')}
+                        onMoveDown={(id) => handleMoveLayer(id, 'down')}
+                    />
+                )}
             </div>
         </div>
     );

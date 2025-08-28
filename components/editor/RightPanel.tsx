@@ -1,7 +1,7 @@
+
 import React from 'react';
-import { Tool, Layer, BrushOptions, TextOptions } from '../../types';
+import { Tool, BrushOptions, TextOptions } from '../../types';
 import { AIPanel } from './panels/AIPanel';
-import { LayersPanel } from './panels/LayersPanel';
 import { BrushPanel } from './panels/BrushPanel';
 import { TextPanel } from './panels/TextPanel';
 import { CropPanel } from './panels/CropPanel';
@@ -29,15 +29,9 @@ interface RightPanelProps {
     
     // Crop Panel Props
     onApplyCrop: () => void;
-    
-    // Layers Panel Props
-    layers: Layer[];
-    setLayers: React.Dispatch<React.SetStateAction<Layer[]>>;
-    activeLayerId: string | null;
-    setActiveLayerId: (id: string | null) => void;
 }
 
-const ToolPanel: React.FC<RightPanelProps> = (props) => {
+const ToolPanel: React.FC<Omit<RightPanelProps, 'layers' | 'setLayers' | 'activeLayerId' | 'setActiveLayerId'>> = (props) => {
     switch(props.activeTool) {
         case 'ai-edit':
             return <AIPanel {...props} />;
@@ -58,25 +52,14 @@ const ToolPanel: React.FC<RightPanelProps> = (props) => {
             return <AdjustmentsPanel />;
         case 'select':
         default:
-            return <div className="p-4 text-center text-sm text-dark-text-secondary">Select a tool to see its options.</div>;
+             return <div className="p-4 text-center text-sm text-dark-text-secondary h-full flex items-center justify-center">Select a tool to see its options.</div>;
     }
 };
 
 export const RightPanel: React.FC<RightPanelProps> = (props) => {
     return (
-        <aside className="w-80 bg-dark-surface flex-shrink-0 border-l border-dark-border flex flex-col">
-            <div className="flex-1 overflow-y-auto p-4">
-                <ToolPanel {...props} />
-            </div>
-            
-            <div className="flex-shrink-0 border-t border-dark-border">
-                <LayersPanel 
-                    layers={props.layers} 
-                    setLayers={props.setLayers} 
-                    activeLayerId={props.activeLayerId}
-                    setActiveLayerId={props.setActiveLayerId}
-                />
-            </div>
+        <aside className="w-80 bg-dark-surface flex-shrink-0 border-l border-dark-border flex flex-col p-4">
+            <ToolPanel {...props} />
         </aside>
     );
 };

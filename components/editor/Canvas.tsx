@@ -1,8 +1,10 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+
+import React, { useEffect, useState, useCallback } from 'react';
 import { ImageFile, Layer, BrushOptions, Tool } from '../../types';
 import { ImageUploader } from '../ImageUploader';
 
 interface CanvasProps {
+    canvasRef: React.RefObject<HTMLCanvasElement>;
     layers: Layer[];
     setLayers: React.Dispatch<React.SetStateAction<Layer[]>>;
     onImageUpload: (image: ImageFile) => void;
@@ -14,9 +16,8 @@ interface CanvasProps {
 }
 
 export const Canvas: React.FC<CanvasProps> = (props) => {
-    const { layers, setLayers, onImageUpload, activeTool, brushOptions, cropRect, setCropRect, canvasContainerRef } = props;
+    const { canvasRef, layers, setLayers, onImageUpload, activeTool, brushOptions, cropRect, setCropRect } = props;
     
-    const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [points, setPoints] = useState<{x: number, y: number}[]>([]);
     
@@ -38,7 +39,6 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
         if (!canvas) return { x: 0, y: 0 };
         const rect = canvas.getBoundingClientRect();
         
-        // Account for canvas scaling if it's not displayed at its native resolution
         const scaleX = canvas.width / rect.width;
         const scaleY = canvas.height / rect.height;
 
@@ -55,14 +55,37 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        const imagePromises: Promise<HTMLImageElement>[] = [];
+        const imageElements: { [key: string]: HTMLImageElement } = {};
+      
+        for (const layer of layers) {
+            if (layer.type === 'image') {
+                const promise = new Promise<HTMLImageElement>(resolve => {
+                    if (imageElements[layer.content]) {
+                        resolve(imageElements[layer.content]);
+                    } else {
+                        const img = new Image();
+                        img.src = layer.content;
+                        img.onload = () => {
+                            imageElements[layer.content] = img;
+                            resolve(img);
+                        };
+                    }
+                });
+                imagePromises.push(promise);
+            }
+        }
+    
+        await Promise.all(imagePromises);
+
         for (const layer of layers) {
             if (!layer.visible) continue;
 
             if (layer.type === 'image') {
-                const img = new Image();
-                img.src = layer.content;
-                await new Promise(resolve => { img.onload = resolve; });
-                ctx.drawImage(img, 0, 0);
+                const img = imageElements[layer.content];
+                if (img) {
+                    ctx.drawImage(img, 0, 0);
+                }
             } else if (layer.type === 'drawing' && layer.options?.points) {
                 ctx.beginPath();
                 ctx.strokeStyle = layer.options.brushColor || '#FFFFFF';
@@ -80,7 +103,7 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
                  ctx.fillText(layer.content, layer.options.x || 50, layer.options.y || 100);
             }
         }
-    }, [layers]);
+    }, [layers, canvasRef]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -89,9 +112,8 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
             canvas.height = height;
         }
         drawLayers();
-    }, [layers, width, height, drawLayers]);
+    }, [layers, width, height, drawLayers, canvasRef]);
 
-    // Brush Tool Logic
     const handleMouseDown = (e: React.MouseEvent) => {
         if (activeTool === 'brush') {
             setIsDrawing(true);
@@ -106,8 +128,9 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
     };
     
     const handleMouseMove = (e: React.MouseEvent) => {
+        const pos = getMousePos(e);
+
         if (isDrawing && activeTool === 'brush') {
-            const pos = getMousePos(e);
             setPoints(prev => [...prev, pos]);
             
             const canvas = canvasRef.current;
@@ -124,10 +147,12 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
             ctx.stroke();
             
         } else if (isCropping && activeTool === 'crop' && cropStart) {
-            const pos = getMousePos(e);
-            const newWidth = pos.x - cropStart.x;
-            const newHeight = pos.y - cropStart.y;
-            setCropRect({ x: cropStart.x, y: cropStart.y, width: newWidth, height: newHeight });
+            setCropRect({ 
+                x: Math.min(pos.x, cropStart.x), 
+                y: Math.min(pos.y, cropStart.y), 
+                width: Math.abs(pos.x - cropStart.x), 
+                height: Math.abs(pos.y - cropStart.y) 
+            });
         }
     };
     
@@ -142,7 +167,7 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
                 options: {
                     points: points,
                     brushColor: brushOptions.color,
-                    brushSize: brushOptions.size
+                    brushSize: brushOptions.size,
                 }
             };
             setLayers(prev => [...prev, newLayer]);
@@ -179,7 +204,7 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp} // End drawing if mouse leaves canvas
+                onMouseLeave={handleMouseUp}
             />
             {activeTool === 'crop' && cropRect && (
                 <div 

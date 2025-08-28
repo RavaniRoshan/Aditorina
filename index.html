@@ -29,7 +29,14 @@
               'dark-accent': '#3B82F6'
             },
             animation: {
-              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'scroll-x': 'scroll-x 40s linear infinite',
+            },
+            keyframes: {
+              'scroll-x': {
+                '0%': { transform: 'translateX(0)' },
+                '100%': { transform: 'translateX(-50%)' },
+              }
             }
           }
         }
@@ -41,12 +48,15 @@
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.16.0",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
     "react/": "https://aistudiocdn.com/react@^19.1.1/",
-    "react": "https://aistudiocdn.com/react@^19.1.1"
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "uuid": "https://aistudiocdn.com/uuid@^11.1.0"
   }
 }
 </script>
 </head>
   <body class="bg-dark-bg">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
