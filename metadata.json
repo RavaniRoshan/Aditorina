@@ -1,0 +1,5 @@
+{
+  "name": "PhotoCursor AI",
+  "description": "An AI-powered photo editor that allows you to modify images using simple text prompts, leveraging the power of Google's Gemini 'nano-banana' model for intuitive, creative image manipulation.",
+  "requestFramePermissions": []
+}
