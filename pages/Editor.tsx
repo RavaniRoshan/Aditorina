@@ -46,7 +46,12 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const viewportRef = useRef<HTMLDivElement>(null);
 
-    const base64StringToFile = (base64String: string, filename: string, mimeType: string): File => {
+    const base64StringToFile = (dataUrl: string, filename: string, mimeType: string): File => {
+      const base64String = dataUrl.split(',')[1];
+      if (!base64String) {
+          console.error("Could not extract base64 string from data URL");
+          return new File([], filename, { type: mimeType });
+      }
       const byteCharacters = atob(base64String);
       const byteNumbers = new Array(byteCharacters.length);
       for (let i = 0; i < byteCharacters.length; i++) {
@@ -223,7 +228,7 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
                 setViewTransform({ x: newX, y: newY, zoom: newZoom });
             }, 0);
         }
-        img.src = `data:${image.file.type};base64,${image.base64}`;
+        img.src = image.base64;
     };
 
     const handleGenerateAIEdit = useCallback(async () => {
@@ -236,24 +241,38 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
         setAiTextResponse(null);
 
         try {
+            const base64Data = imageFile.base64.split(',')[1];
+            const mimeType = imageFile.file.type;
+            
             const result = await editImageWithPrompt(
-                imageFile.base64,
-                imageFile.file.type,
+                base64Data,
+                mimeType,
                 prompt
             );
             
             setAiTextResponse(result.textResponse);
 
             if (result.editedImage) {
-                 const newLayer: Layer = {
-                    id: uuidv4(),
-                    name: prompt.substring(0, 20) || 'AI Edit',
-                    visible: true,
-                    type: 'image',
-                    content: result.editedImage,
-                };
-                setLayers(prev => [...prev, newLayer]);
-                setActiveLayerId(newLayer.id);
+                 const img = new Image();
+                 img.onload = () => {
+                     const newLayer: Layer = {
+                         id: uuidv4(),
+                         name: prompt.substring(0, 20) || 'AI Edit',
+                         visible: true,
+                         type: 'image',
+                         content: result.editedImage,
+                         options: {
+                             width: img.width,
+                             height: img.height,
+                         },
+                     };
+                     setLayers(prev => [...prev, newLayer]);
+                     setActiveLayerId(newLayer.id);
+                 };
+                 img.onerror = () => {
+                     setError("Failed to load the generated image.");
+                 };
+                 img.src = result.editedImage;
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
@@ -470,7 +489,7 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
     };
 
     const handleMouseMove = (e: React.MouseEvent) => {
-        if (isPanning.current && (isSpacePressed || e.buttons === 4)) {
+        if (isPanning.current && (isSpacePressed || e.buttons === 4 || e.buttons === 1)) {
             const dx = e.clientX - panStart.current.x;
             const dy = e.clientY - panStart.current.y;
             panStart.current = { x: e.clientX, y: e.clientY };
@@ -597,7 +616,13 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
         if (isSpacePressed) {
             return isPanning.current ? 'grabbing' : 'grab';
         }
-        return 'default';
+        switch (activeTool) {
+            case 'brush':
+            case 'crop':
+                return 'crosshair';
+            default:
+                return 'default';
+        }
     };
 
     return (
@@ -632,6 +657,7 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
                         cropRect={cropRect}
                         setCropRect={setCropRect}
                         viewTransform={viewTransform}
+                        isSpacePressed={isSpacePressed}
                    />
                    <FloatingToolbar activeTool={activeTool} onToolSelect={setActiveTool} />
                    <ZoomControls 

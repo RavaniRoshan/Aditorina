@@ -22,8 +22,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload }) =
             reader.onload = (e) => {
                 const base64 = e.target?.result as string;
                 if(base64){
-                    const base64Data = base64.split(',')[1];
-                     onImageUpload({ file, base64: base64Data });
+                     onImageUpload({ file, base64: base64 });
                 }
             };
             reader.readAsDataURL(file);
@@ -39,8 +38,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload }) =
             reader.onload = (e) => {
                 const base64 = e.target?.result as string;
                 if(base64){
-                    const base64Data = base64.split(',')[1];
-                    onImageUpload({ file, base64: base64Data });
+                    onImageUpload({ file, base64: base64 });
                 }
             };
             reader.readAsDataURL(file);

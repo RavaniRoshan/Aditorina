@@ -56,7 +56,11 @@ const ReviewCard: React.FC<(typeof reviews)[0]> = ({ name, handle, review, avata
 );
 
 export const InfiniteReviews: React.FC = () => {
-    const duplicatedReviews = [...reviews, ...reviews];
+    const row1Reviews = reviews.slice(0, Math.ceil(reviews.length / 2));
+    const row2Reviews = reviews.slice(Math.ceil(reviews.length / 2));
+
+    const duplicatedRow1 = [...row1Reviews, ...row1Reviews];
+    const duplicatedRow2 = [...row2Reviews, ...row2Reviews];
 
     return (
         <section className="py-24 relative z-10 overflow-hidden">
@@ -65,8 +69,15 @@ export const InfiniteReviews: React.FC = () => {
             </div>
             <div className="relative w-full overflow-hidden [mask-image:linear-gradient(to_right,transparent,white_10%,white_90%,transparent)]">
                 <div className="flex w-max animate-scroll-x">
-                    {duplicatedReviews.map((review, index) => (
-                        <ReviewCard key={`${review.handle}-${index}`} {...review} />
+                    {duplicatedRow1.map((review, index) => (
+                        <ReviewCard key={`row1-${review.handle}-${index}`} {...review} />
+                    ))}
+                </div>
+            </div>
+             <div className="relative w-full overflow-hidden [mask-image:linear-gradient(to_right,transparent,white_10%,white_90%,transparent)] mt-8">
+                <div className="flex w-max animate-scroll-x-reverse">
+                    {duplicatedRow2.map((review, index) => (
+                        <ReviewCard key={`row2-${review.handle}-${index}`} {...review} />
                     ))}
                 </div>
             </div>

@@ -12,10 +12,11 @@ interface CanvasProps {
     cropRect: {x:number, y:number, width:number, height:number} | null;
     setCropRect: (rect: {x:number, y:number, width:number, height:number} | null) => void;
     viewTransform: { x: number; y: number; zoom: number };
+    isSpacePressed: boolean;
 }
 
 export const Canvas: React.FC<CanvasProps> = (props) => {
-    const { canvasRef, layers, setLayers, onImageUpload, activeTool, brushOptions, cropRect, setCropRect, viewTransform } = props;
+    const { canvasRef, layers, setLayers, onImageUpload, activeTool, brushOptions, cropRect, setCropRect, viewTransform, isSpacePressed } = props;
     
     const [isDrawing, setIsDrawing] = useState(false);
     const [points, setPoints] = useState<{x: number, y: number}[]>([]);
@@ -24,9 +25,17 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
     const [cropStart, setCropStart] = useState<{x:number, y:number} | null>(null);
 
     const getCanvasDimensions = () => {
-        const baseLayer = layers.find(l => l.type === 'image');
-        if (baseLayer && baseLayer.options?.width && baseLayer.options?.height) {
-            return { width: baseLayer.options.width, height: baseLayer.options.height };
+        let maxWidth = 0;
+        let maxHeight = 0;
+        layers.forEach(l => {
+            if (l.type === 'image' && l.options?.width && l.options?.height) {
+                maxWidth = Math.max(maxWidth, l.options.width);
+                maxHeight = Math.max(maxHeight, l.options.height);
+            }
+        });
+    
+        if (maxWidth > 0 && maxHeight > 0) {
+            return { width: maxWidth, height: maxHeight };
         }
         return { width: 0, height: 0 };
     };
@@ -58,18 +67,24 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
         const imageElements: { [key: string]: HTMLImageElement } = {};
       
         for (const layer of layers) {
-            if (layer.type === 'image') {
+            if (layer.type === 'image' && layer.content) {
                 const promise = new Promise<HTMLImageElement>(resolve => {
                     if (imageElements[layer.content]) {
                         resolve(imageElements[layer.content]);
-                    } else {
-                        const img = new Image();
-                        img.src = layer.content;
-                        img.onload = () => {
-                            imageElements[layer.content] = img;
-                            resolve(img);
-                        };
+                        return;
                     }
+                    const img = new Image();
+                    img.onload = () => {
+                        imageElements[layer.content] = img;
+                        resolve(img);
+                    };
+                    img.onerror = () => {
+                        console.error(`Failed to load image for layer: "${layer.name}"`);
+                        // Resolve with the failed image element. It won't have a size and won't be drawn,
+                        // but it prevents Promise.all from hanging.
+                        resolve(img);
+                    };
+                    img.src = layer.content;
                 });
                 imagePromises.push(promise);
             }
@@ -82,7 +97,7 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
 
             if (layer.type === 'image') {
                 const img = imageElements[layer.content];
-                if (img) {
+                if (img && img.width > 0 && img.height > 0) {
                     ctx.drawImage(img, 0, 0);
                 }
             } else if (layer.type === 'drawing' && layer.options?.points) {
@@ -191,14 +206,6 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
             </div>
         );
     }
-    
-    const cursorClass = () => {
-        switch(activeTool) {
-            case 'brush': return 'cursor-crosshair';
-            case 'crop': return 'cursor-crosshair';
-            default: return 'cursor-default';
-        }
-    };
 
     return (
         <div 
@@ -209,11 +216,15 @@ export const Canvas: React.FC<CanvasProps> = (props) => {
                 transform: `translate(${viewTransform.x}px, ${viewTransform.y}px) scale(${viewTransform.zoom})`,
                 transformOrigin: 'top left',
             }}
-            onMouseDown={(e) => e.stopPropagation()} // Prevent pan when clicking on canvas
+            onMouseDown={(e) => {
+                if (!isSpacePressed) {
+                    e.stopPropagation();
+                }
+            }}
         >
             <canvas
                 ref={canvasRef}
-                className={cursorClass()}
+                className="cursor-inherit"
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
