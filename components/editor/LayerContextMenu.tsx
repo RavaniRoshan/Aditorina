@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { TrashIcon, DuplicateIcon, ChevronUpIcon, ChevronDownIcon } from './icons';
+import { TrashIcon, DuplicateIcon, ChevronUpIcon, ChevronDownIcon, ZoomToSelectionIcon } from './icons';
 
 interface LayerContextMenuProps {
     menuPosition: { x: number; y: number; };
@@ -10,6 +9,7 @@ interface LayerContextMenuProps {
     onDuplicate: (layerId: string) => void;
     onMoveUp: (layerId: string) => void;
     onMoveDown: (layerId: string) => void;
+    onZoomToLayer: (layerId: string) => void;
 }
 
 const ContextMenuItem: React.FC<{ onClick: () => void; children: React.ReactNode; }> = ({ onClick, children }) => (
@@ -26,7 +26,7 @@ const ContextMenuItem: React.FC<{ onClick: () => void; children: React.ReactNode
 
 
 export const LayerContextMenu: React.FC<LayerContextMenuProps> = (props) => {
-    const { menuPosition, layerId, onClose, onDelete, onDuplicate, onMoveUp, onMoveDown } = props;
+    const { menuPosition, layerId, onClose, onDelete, onDuplicate, onMoveUp, onMoveDown, onZoomToLayer } = props;
 
     return (
         <div
@@ -37,6 +37,10 @@ export const LayerContextMenu: React.FC<LayerContextMenuProps> = (props) => {
             <ContextMenuItem onClick={() => onDuplicate(layerId)}>
                 <DuplicateIcon />
                 <span>Duplicate</span>
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onZoomToLayer(layerId)}>
+                <ZoomToSelectionIcon />
+                <span>Zoom to Layer</span>
             </ContextMenuItem>
             <div className="h-px bg-dark-border my-1" />
             <ContextMenuItem onClick={() => onMoveUp(layerId)}>

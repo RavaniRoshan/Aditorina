@@ -384,6 +384,68 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
         if (closeMenu) closeAllContextMenus();
     }, []);
 
+    const getBoundingBoxForLayer = (layer: Layer): { x: number; y: number; width: number; height: number } | null => {
+        if (!layer.options) return null;
+        switch (layer.type) {
+            case 'image':
+                return { x: 0, y: 0, width: layer.options.width || 0, height: layer.options.height || 0 };
+            case 'text': {
+                const { x = 0, y = 0, fontSize = 48 } = layer.options;
+                const approxWidth = layer.content.length * fontSize * 0.5;
+                const approxHeight = fontSize;
+                // For canvas.fillText, y is the baseline. The box is roughly above it.
+                return { x, y: y - approxHeight, width: approxWidth, height: approxHeight };
+            }
+            case 'drawing': {
+                if (!layer.options.points || layer.options.points.length === 0) return null;
+                const { points, brushSize = 10 } = layer.options;
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                points.forEach(p => {
+                    minX = Math.min(minX, p.x);
+                    minY = Math.min(minY, p.y);
+                    maxX = Math.max(maxX, p.x);
+                    maxY = Math.max(maxY, p.y);
+                });
+                
+                if (!isFinite(minX)) return null;
+
+                const halfBrush = brushSize / 2;
+                return { 
+                    x: minX - halfBrush, 
+                    y: minY - halfBrush, 
+                    width: (maxX - minX) + brushSize, 
+                    height: (maxY - minY) + brushSize 
+                };
+            }
+            default:
+                return null;
+        }
+    };
+
+    const handleZoomToLayer = useCallback((layerId: string, closeMenu = true) => {
+        const layer = layers.find(l => l.id === layerId);
+        if (!layer || !viewportRef.current) return;
+
+        const bounds = getBoundingBoxForLayer(layer);
+        if (!bounds || bounds.width <= 0 || bounds.height <= 0) return;
+
+        const container = viewportRef.current;
+        const padding = 120; // A bit more padding for layers
+        const { width: containerWidth, height: containerHeight } = container.getBoundingClientRect();
+
+        const scaleX = (containerWidth - padding) / bounds.width;
+        const scaleY = (containerHeight - padding) / bounds.height;
+        const newZoom = Math.min(scaleX, scaleY, MAX_ZOOM);
+
+        // Center the layer in the viewport
+        const newX = (containerWidth / 2) - (bounds.x + bounds.width / 2) * newZoom;
+        const newY = (containerHeight / 2) - (bounds.y + bounds.height / 2) * newZoom;
+
+        setViewTransform({ x: newX, y: newY, zoom: newZoom });
+
+        if (closeMenu) closeAllContextMenus();
+    }, [layers]);
+
     const handleMoveLayer = (layerId: string, direction: 'up' | 'down') => {
         const index = layers.findIndex(l => l.id === layerId);
         if (index === -1) return;
@@ -510,6 +572,12 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
             if (e.shiftKey && !isCtrlCmd) {
                  switch (e.key) {
                     case '1': e.preventDefault(); zoomToFit(); break;
+                    case '2':
+                        if (activeLayerId) {
+                           e.preventDefault();
+                           handleZoomToLayer(activeLayerId, false);
+                        }
+                        break;
                  }
             }
 
@@ -523,7 +591,7 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [activeLayerId, handleZoomAction, handleZoomTo100, zoomToFit, handleDuplicateLayer, handleDeleteLayer]);
+    }, [activeLayerId, handleZoomAction, handleZoomTo100, zoomToFit, handleDuplicateLayer, handleDeleteLayer, handleZoomToLayer]);
 
     const getCursor = () => {
         if (isSpacePressed) {
@@ -597,6 +665,7 @@ export const Editor: React.FC<EditorProps> = ({ onExitEditor }) => {
                         onDuplicate={handleDuplicateLayer}
                         onMoveUp={(id) => handleMoveLayer(id, 'up')}
                         onMoveDown={(id) => handleMoveLayer(id, 'down')}
+                        onZoomToLayer={handleZoomToLayer}
                     />
                 )}
                 {viewportContextMenu && (
